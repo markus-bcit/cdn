@@ -26,6 +26,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 3
+
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.9.0
     container_name: cdn-toxiproxy
@@ -33,3 +34,28 @@ services:
       - backhaul_net
     ports:
       - "8474:8474"   # API port to configure latency on the fly
+
+  edge:
+    build:
+      context: ./edge
+      dockerfile: Dockerfile
+    container_name: cdn-edge
+    restart: unless-stopped
+    environment:
+      - ORIGIN_URL=http://origin:80/media
+      - CACHE_DIR=/app/cache
+      - CACHE_MAX_BYTES=209715200   # 200 MB disk cap
+      - EVICTION_POLICY=lru         # "lru" or "video_aware"
+      - SQLITE_DB_PATH=/app/data/edge.db
+    volumes:
+      - ./edge:/app
+      - ./edge/cache_data:/app/cache
+      - ./edge/data:/app/data
+    ports:
+      - "8000:8000"
+    networks:
+      - backhaul_net   # To reach origin for cache misses
+      - edge_net       # To serve clients/viewers
+    depends_on:
+      origin:
+        condition: service_healthy
